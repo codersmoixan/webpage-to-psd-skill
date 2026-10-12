@@ -1,0 +1,4 @@
+interface:
+  display_name: "webpage-to-psd"
+  short_description: "将在线网页还原为分层且文字可编辑的 Photoshop PSD 文件"
+  default_prompt: "Use $webpage-to-psd to convert this webpage into a layered PSD with editable text."
