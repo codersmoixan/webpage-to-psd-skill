@@ -20,24 +20,26 @@ $webpage-to-psd 将 https://example.com/about 生成 PSD，按 2560 像素视口
 $webpage-to-psd 将这个项目的 about 页面生成 PSD，视口宽度 2560，放大两倍，保留可编辑文字。
 ```
 
+以上三种调用都会被支持：第一种未指定宽度，使用默认的 2560 像素和一倍输出；第二种采用显式指定的视口宽度和默认一倍输出；第三种同时采用显式视口宽度与输出倍率。`2560` 只是缺省宽度，不是固定宽度；调用时可以指定其他正整数视口宽度。
+
 如需特定轮播图片、年份、标签页、弹窗或移动端宽度，请在请求中明确指定。只提供一张截图不适合本技能，需要可渲染的页面或项目。
 
 ## 当前默认值
 
 | 项目 | 默认行为 |
 | --- | --- |
-| 捕获宽度 | 当前设备上 Codex／浏览器窗口所在屏幕的实际像素宽度；明确指定的宽度优先 |
+| 捕获宽度 | 未指定时默认 **2560 CSS 像素**；任何明确指定的正整数宽度优先 |
 | 输出倍率 | **1 倍**；请求放大时可使用 2、3、4 倍 |
 | 分辨率 | 横向、纵向均为 **72 PPI** |
 | 页面范围 | 完整页面，包含页脚 |
 | 页面状态 | 当前／默认静态状态，不主动切换交互内容 |
 | 本地项目 | 仅通过本机回环服务器渲染，不部署或上传项目 |
 
-默认将屏幕像素宽度数值用作 CSS 视口宽度。屏幕宽度、浏览器视口宽度、页面内容宽度、输出倍率和 PPI 是独立概念。系统缩放不会被静默用来换算目标宽度。
+仅在调用未指定宽度时，才将浏览器 CSS 视口宽度设置为 2560 像素。显式宽度不会被改回 2560。浏览器视口宽度、页面内容宽度、输出倍率和 PPI 是独立概念。
 
 例如：2560 × 6816 的捕获，一倍输出为 2560 × 6816，两倍输出为 5120 × 13632。修改 PPI 本身不会增加像素。当前脚本没有 `--ppi` 参数，采用 72 PPI；如需其他值，应同步调整导出配置、原生文字字号换算及验证。
 
-浏览器滚动条可能占用内容宽度，技能会核对实际截图尺寸。若要求 PSD 精确为 2560 像素宽，必须明确处理滚动条差异，不会把 2545 当作 2560，也不会拉伸旧截图。屏幕读取失败或多屏定位不明确时，会询问所需宽度或显示器。
+浏览器滚动条可能占用内容宽度，技能会核对实际截图尺寸。仅当宽度和倍率都未指定时，PSD 才默认精确为 2560 像素宽；显式宽度按指定值输出，显式倍率再作用于该视口宽度。技能会明确处理滚动条差异，不会把较窄截图冒充目标宽度，也不会拉伸旧截图。
 
 ## 转换流程
 
@@ -60,7 +62,7 @@ $webpage-to-psd 将这个项目的 about 页面生成 PSD，视口宽度 2560，
 | 交付说明文件 | 尺寸、倍率、字体、状态和已知限制；名称按任务确定 |
 | `PSD_validation.json` | 图层计数、原生文字、PPI、字体选择与合成误差 |
 | `image_provenance.json` | 图片原文件来源及任何回退记录 |
-| `capture_dimensions.json` | 屏幕／视口／截图／最终画布尺寸，由执行流程记录 |
+| `capture_dimensions.json` | 必需的视口／截图／倍率契约；准备阶段校验并补充最终画布尺寸 |
 | `visual_qa/` | 缩略总览、原生像素局部和质量摘要 |
 
 ## 手动运行脚本
@@ -70,21 +72,18 @@ $webpage-to-psd 将这个项目的 about 页面生成 PSD，视口宽度 2560，
 在技能目录下执行，示例中的项目和输出路径需替换为实际路径：
 
 ```powershell
-# Windows：读取显示器信息。
-python -X utf8 scripts/read_display.py --output 'C:/PSD作业/device_display.json'
-
 # 启动本地项目，使用它报告的 URL；保持此进程运行到素材取得完毕。
 python -X utf8 scripts/serve_static_project.py --project-dir 'D:/网站项目/preview' --entry 'pages/about.html' --job-dir 'C:/PSD作业'
 ```
 
-按 [浏览器捕获规范](references/browser-capture.md) 生成 `web_dom.json`、`web_dom_after.json`、`web_reference.png` 和 `web_assets.json` 后：
+按 [浏览器捕获规范](references/browser-capture.md) 生成 `web_dom.json`、`web_dom_after.json`、`web_reference.png`、`capture_dimensions.json` 和 `web_assets.json` 后：
 
 ```powershell
 python -X utf8 scripts/check_capture_pair.py --job-dir 'C:/PSD作业'
 python -X utf8 scripts/build_psd.py prepare --job-dir 'C:/PSD作业'
 ```
 
-`prepare` 默认一倍；明确要求两倍时使用：
+`prepare` 默认一倍；明确要求两倍时必须使用严格倍率模式：
 
 ```powershell
 python -X utf8 scripts/build_psd.py prepare --job-dir 'C:/PSD作业' --render-scale 2 --strict-render-scale

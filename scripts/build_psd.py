@@ -25,10 +25,19 @@ from psd_tools.psd.tagged_blocks import TaggedBlock
 from generate_visual_qa import generate_visual_qa
 from image_sources import (local_image_path, single_background_url,
                            render_source_image, UnsupportedImagePaint)
+from capture_contract import (finalize_capture_dimensions,
+                              validate_capture_dimensions,
+                              verify_prepared_dimensions)
 
 from export_support import choose_scale, select_font, atomic_save
 
 DOCUMENT_PPI = 72
+
+
+def require(condition, message):
+    """Keep production validation active even when Python runs with -O."""
+    if not condition:
+        raise ValueError(message)
 
 
 def px(value):
@@ -41,16 +50,29 @@ def css_string(css):
 
 
 def prepare(root, render_scale=1, allow_image_raster_fallback=False, auto_scale=True):
-    if (root/'web_dom_after.json').exists():
-        from check_capture_pair import compare
-        before = json.loads((root/'web_dom.json').read_text(encoding='utf-8-sig'))
-        after = json.loads((root/'web_dom_after.json').read_text(encoding='utf-8-sig'))
-        state = compare(before, after)
-        (root/'capture_validation.json').write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding='utf8')
-        if not state['stable']:
-            raise ValueError('Page changed across screenshot acquisition; recapture a stable state before preparing layers.')
-    data = json.loads((root / 'web_dom.json').read_text(encoding='utf-8-sig'))
+    required = ('web_dom.json', 'web_dom_after.json', 'web_reference.png',
+                'web_assets.json', 'capture_dimensions.json')
+    missing = [name for name in required if not (root / name).is_file()]
+    if missing:
+        raise FileNotFoundError(f'Required capture artifact(s) missing: {", ".join(missing)}')
+    from check_capture_pair import compare
+    before = json.loads((root/'web_dom.json').read_text(encoding='utf-8-sig'))
+    after = json.loads((root/'web_dom_after.json').read_text(encoding='utf-8-sig'))
+    state = compare(before, after)
+    (root/'capture_validation.json').write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding='utf8')
+    if not state['stable']:
+        raise ValueError('Page changed across screenshot acquisition; recapture a stable state before preparing layers.')
+    data = before
     resources = json.loads((root / 'web_assets.json').read_text(encoding='utf-8-sig'))
+    with Image.open(root / 'web_reference.png') as reference_image:
+        width, height = reference_image.size
+    dimensions = validate_capture_dimensions(
+        root, before, after, (width, height), render_scale, not auto_scale)
+    requested_scale = render_scale
+    render_scale = choose_scale(width, height, render_scale, auto_scale)
+    dimensions = finalize_capture_dimensions(dimensions, (width, height), render_scale)
+    (root/'capture_dimensions.json').write_text(
+        json.dumps(dimensions, ensure_ascii=False, indent=2), encoding='utf8')
     assets_dir = root / 'web_psd_assets'
     assets_dir.mkdir(exist_ok=True)
     urls = {}
@@ -89,11 +111,6 @@ def prepare(root, render_scale=1, allow_image_raster_fallback=False, auto_scale=
         return image_paths[url]
     elements = {e['index']: e for e in data['elements']}
     atoms = []
-    with Image.open(root / 'web_reference.png') as reference_image:
-        width, height = reference_image.size
-    requested_scale = render_scale
-    render_scale = choose_scale(width, height, render_scale, auto_scale)
-
     def inline_urls(value):
         for url, data_url in urls.items():
             value = value.replace(url, data_url)
@@ -297,7 +314,7 @@ def prepare(root, render_scale=1, allow_image_raster_fallback=False, auto_scale=
                 parts.append(f'<div class="atom" style="left:{a["atlasX"]+a["offsetX"]}px;top:{a["atlasY"]+a["offsetY"]}px;opacity:{a["opacity"]}">{a["fragment"]}</div>')
             parts.append('</div>')
             (root/f'atlas_{num}_{bg}.html').write_text(''.join(parts), encoding='utf8')
-    manifest={'width':width,'height':height,'renderScale':render_scale,'requestedRenderScale':requested_scale,'scaleReduced':render_scale != requested_scale,'atoms':ordered,'pages':[{'width':atlas_width*render_scale,'height':h*render_scale} for _,h in pages]}
+    manifest={'width':width,'height':height,'renderScale':render_scale,'requestedRenderScale':requested_scale,'scaleReduced':render_scale != requested_scale,'captureWidthSource':dimensions['widthSource'],'atoms':ordered,'pages':[{'width':atlas_width*render_scale,'height':h*render_scale} for _,h in pages]}
     (root/'web_layers.json').write_text(json.dumps(manifest,ensure_ascii=False,indent=2), encoding='utf8')
     print(json.dumps({'atoms':len(ordered),'text':sum(a['kind']=='text' for a in ordered),
                       'originalImageLayers':sum(a.get('imageSource')=='original-file' for a in ordered),
@@ -368,6 +385,7 @@ def recover_alpha(white, black, box):
 
 def build(root, template_path, output_name):
     manifest=json.loads((root/'web_layers.json').read_text(encoding='utf-8-sig'))
+    capture_dimensions=verify_prepared_dimensions(root, manifest)
     scale=manifest.get('renderScale',1)
     size=(manifest['width']*scale,manifest['height']*scale)
     if max(size)>30000:
@@ -400,7 +418,9 @@ def build(root, template_path, output_name):
                 atlas_page=atom['atlasPage']
                 white=Image.open(root/f'atlas_{atlas_page}_white.png').convert('RGB')
                 black=Image.open(root/f'atlas_{atlas_page}_black.png').convert('RGB')
-                assert white.size==black.size==(manifest['pages'][atlas_page]['width'],manifest['pages'][atlas_page]['height']), 'Atlas dimensions differ from requested render scale'
+                expected_atlas=(manifest['pages'][atlas_page]['width'],manifest['pages'][atlas_page]['height'])
+                require(white.size == black.size == expected_atlas,
+                        'Atlas dimensions differ from requested render scale')
             x,y=atom['atlasX']*scale,atom['atlasY']*scale;w,h=atom['w']*scale,atom['h']*scale
             im=recover_alpha(white,black,(x,y,w,h))
         box=im.getbbox()
@@ -425,28 +445,38 @@ def build(root, template_path, output_name):
     psd._updated=False
     def validate_saved(path):
         candidate = PSDImage.open(path)
-        assert candidate.size == size
+        require(candidate.size == size, f'Reopened PSD canvas {candidate.size} differs from expected {size}')
         resolution = candidate.image_resources.get_data(Resource.RESOLUTION_INFO)
-        assert resolution.horizontal == resolution.vertical == DOCUMENT_PPI << 16
+        require(resolution.horizontal == resolution.vertical == DOCUMENT_PPI << 16,
+                f'Reopened PSD resolution is not {DOCUMENT_PPI} PPI')
         types = [t for t in candidate.descendants() if t.kind == 'type']
         expected = [a for a in manifest['atoms'] if a['kind'] == 'text']
-        assert len(types) == len(expected)
+        require(len(types) == len(expected),
+                f'Reopened PSD has {len(types)} type layers; expected {len(expected)}')
         for t,a in zip(types, expected):
-            assert t.text.rstrip('\r\x00') == a['text']
+            require(t.text.rstrip('\r\x00') == a['text'],
+                    f'Type layer {a["id"]} text changed during PSD round trip')
             x,y,w,h = a['pixelBox']
-            assert tuple(t.bbox) == (x,y,x+w,y+h)
+            require(tuple(t.bbox) == (x,y,x+w,y+h),
+                    f'Type layer {a["id"]} bounds changed during PSD round trip')
     atomic_save(psd, output, validate_saved)
     preview_path=root/(output.stem+'_preview.png')
     preview.convert('RGB').save(preview_path)
     reopened=PSDImage.open(output)
     resolution = reopened.image_resources.get_data(Resource.RESOLUTION_INFO)
-    assert resolution.horizontal == resolution.vertical == DOCUMENT_PPI << 16
+    require(resolution.horizontal == resolution.vertical == DOCUMENT_PPI << 16,
+            f'Final PSD resolution is not {DOCUMENT_PPI} PPI')
     types=[t for t in reopened.descendants() if t.kind=='type']
     expected=[a for a in manifest['atoms'] if a['kind']=='text']
-    assert len(types)==len(expected), (len(types),len(expected))
+    require(len(types) == len(expected),
+            f'Final PSD has {len(types)} type layers; expected {len(expected)}')
     for t,a in zip(types,expected):
-        assert t.text.rstrip('\r\x00')==a['text'],(t.text,a['text'])
-        assert tuple(t.bbox)==(a['pixelBox'][0],a['pixelBox'][1],a['pixelBox'][0]+a['pixelBox'][2],a['pixelBox'][1]+a['pixelBox'][3])
+        require(t.text.rstrip('\r\x00') == a['text'],
+                f'Final type layer {a["id"]} text differs from the captured text')
+        expected_box=(a['pixelBox'][0],a['pixelBox'][1],
+                      a['pixelBox'][0]+a['pixelBox'][2],a['pixelBox'][1]+a['pixelBox'][3])
+        require(tuple(t.bbox) == expected_box,
+                f'Final type layer {a["id"]} bounds differ from the prepared layer')
     (root/'web_layers.json').write_text(json.dumps(manifest,ensure_ascii=False,indent=2), encoding='utf8')
     reference=np.asarray(Image.open(root/'web_reference.png').convert('RGB'),dtype=np.int16)
     actual=np.asarray(preview.convert('RGB').resize((manifest['width'],manifest['height']),Image.Resampling.LANCZOS),dtype=np.int16)
@@ -456,6 +486,7 @@ def build(root, template_path, output_name):
     report['renderScale'] = scale
     report['requestedRenderScale'] = manifest.get('requestedRenderScale', scale)
     report['scaleReduced'] = manifest.get('scaleReduced', False)
+    report['captureDimensions'] = capture_dimensions
     report['fontSelections'] = [dict(id=a['id'], **a['fontSelection']) for a in manifest['atoms'] if a.get('fontSelection')]
     report['roundtripMethod'] = 'Independent psd-tools composite of reopened PSD in strips'
     image_provenance=[{'id':a['id'],'kind':a['kind'],'mode':a.get('imageSource'),
@@ -504,4 +535,3 @@ def main():
 
 if __name__=='__main__':
     main()
-

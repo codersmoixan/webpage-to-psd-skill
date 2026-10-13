@@ -50,17 +50,30 @@ class OriginalImageTests(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
+    def write_capture_contract(self, scale, scale_source):
+        state = dict(url=self.source['url'], width=80, height=80, viewportHeight=80,
+                     scrollX=0, scrollY=0, clientWidth=80, scrollbarWidth=0, ratio=1,
+                     fontStatus='loaded', pendingVisibleImages=[], elements=[self.element])
+        (self.job / 'web_dom.json').write_text(json.dumps(state))
+        (self.job / 'web_dom_after.json').write_text(json.dumps(state))
+        dimensions = dict(widthSource='explicit', requestedViewportWidth=80,
+                          measuredInnerWidth=80, measuredInnerHeight=80,
+                          clientWidth=80, scrollbarWidth=0, devicePixelRatio=1,
+                          screenshotWidth=80, screenshotHeight=80,
+                          scaleSource=scale_source, requestedRenderScale=scale)
+        (self.job / 'capture_dimensions.json').write_text(json.dumps(dimensions))
+
     def run_prepare(self, allow=False):
-        (self.job / 'web_dom.json').write_text(json.dumps({'elements': [self.element]}))
+        self.write_capture_contract(4, 'explicit')
         with contextlib.redirect_stdout(io.StringIO()):
-            prepare(self.job, 4, allow)
+            prepare(self.job, 4, allow, auto_scale=False)
         return json.loads((self.job / 'web_layers.json').read_text())
 
     def test_default_scale_and_wide_atlas(self):
         self.element.update(tag='div',src=None)
         self.element['rect']['w']=2560
         self.css['backgroundColor']='red'
-        (self.job/'web_dom.json').write_text(json.dumps({'elements':[self.element]}))
+        self.write_capture_contract(1, 'default-1')
         with contextlib.redirect_stdout(io.StringIO()): prepare(self.job)
         manifest=json.loads((self.job/'web_layers.json').read_text())
         self.assertEqual(manifest['renderScale'],1)
@@ -85,10 +98,10 @@ class OriginalImageTests(unittest.TestCase):
     def test_blank_text_cache_aborts_and_preserves_previous_output(self):
         m=self.run_prepare()
         atom=dict(m['atoms'][0],id=1,kind='text',text='Expected text',atlasPage=0,atlasX=0,atlasY=0,w=20,h=20,pixelBox=[1,1,2,2])
-        atom.pop('imageSource');m['atoms']=[atom];m['renderScale']=1;m['pages']=[dict(width=20,height=20)]
+        atom.pop('imageSource');m['atoms']=[atom];m['pages']=[dict(width=80,height=80)]
         (self.job/'web_layers.json').write_text(json.dumps(m))
-        Image.new('RGB',(20,20),'white').save(self.job/'atlas_0_white.png')
-        Image.new('RGB',(20,20),'black').save(self.job/'atlas_0_black.png')
+        Image.new('RGB',(80,80),'white').save(self.job/'atlas_0_white.png')
+        Image.new('RGB',(80,80),'black').save(self.job/'atlas_0_black.png')
         target=self.job/'old.psd';target.write_bytes(b'previous valid export')
         with self.assertRaisesRegex(ValueError,'Missing rendered text cache'):
             build(self.job,TEMPLATE,'old.psd')
@@ -110,6 +123,7 @@ class OriginalImageTests(unittest.TestCase):
         self.assertEqual(composite.getpixel((60, 50))[:3], (255, 255, 255))
         report = json.loads((self.job / 'PSD_validation.json').read_text())
         self.assertEqual(report['resolutionPPI'], [72.0, 72.0])
+        self.assertEqual(report['captureDimensions']['finalPSDWidth'], 320)
         self.assertEqual(report['originalImageLayers'], 1)
         self.assertEqual(report['imageRasterFallbacks'], [])
         self.assertEqual(len(list(self.job.glob('atlas_*.png'))), 0)
