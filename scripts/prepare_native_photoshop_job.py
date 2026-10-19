@@ -4,6 +4,7 @@ Does not launch Photoshop or mark a file delivery-ready. See native-photoshop-wo
 import argparse,json,re,html,math
 from pathlib import Path
 from PIL import ImageColor
+from native_shadows import split_shadow
 
 def generate(job_dir,staging_psd,output_psd):
  p=Path(job_dir).resolve();staging_psd=Path(staging_psd).resolve();output_psd=Path(output_psd).resolve()
@@ -46,7 +47,7 @@ def generate(job_dir,staging_psd,output_psd):
     bw=[float(st.get('border-'+s+'-width','0px').replace('px','')) for s in ['top','right','bottom','left']];bc=[col(st.get('border-'+s+'-color','transparent')) for s in ['top','right','bottom','left']];uni=len(set(bw))==1 and len(set(map(tuple,bc)))==1
     bounds=[r['x'],r['y'],r['w'],r['h']]
     shadow=st.get('box-shadow','none')
-    if shadow not in ('none','rgba(21, 57, 90, 0.04) 0px 2px 8px 0px'):raise ValueError('This shadow family needs a validated native effect renderer; do not reuse the sample shadow')
+    # Split only supported profiles; unknown shadows still fail explicitly.
     if a['css'].get('transform','none')!='none' or a['css'].get('clipPath','none')!='none':raise ValueError('Transformed/clipped surface needs a validated shape route')
     if fill[3] or (uni and bw[0] and bc[0][3]):item['specs'].append(dict(bounds=bounds,radii=rr(st.get('border-radius','0px'),r['w'],r['h']),fill=fill,stroke=bc[0] if uni else None,strokeWidth=bw[0] if uni else 0,opacity=a['opacity'],shadow=st.get('box-shadow','none')))
     if not uni:
@@ -54,6 +55,7 @@ def generate(job_dir,staging_psd,output_psd):
      for i,(width,c) in enumerate(zip(bw,bc)):
       if width and c[3]:item['specs'].append(dict(bounds=[[x,y,w,width],[x+w-width,y,width,h],[x,y+h-width,w,width],[x,y,width,h]][i],radii=[0]*4,fill=c,stroke=None,strokeWidth=0,opacity=a['opacity'],shadow='none'))
 
+  item['specs']=[part for spec in item['specs'] for part in split_shadow(spec)]
   if a.get('pixelBox'):items.append(item)
  scale=m.get('renderScale',1)
  for item in items:

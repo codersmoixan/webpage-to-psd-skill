@@ -11,7 +11,7 @@ function s(t){return stringIDToTypeID(t);}function c(t){return charIDToTypeID(t)
 function read(f){f.encoding='UTF8';must(f.open('r'),'Cannot read '+f);var t=f.read();f.close();return t;}
 function write(f,v){f.encoding='UTF8';f.open('w');f.write(JSON.stringify(v,null,2));f.close();}
 var previous=app.documents.length?app.activeDocument:null,oldDialogs=app.displayDialogs,oldUnits=app.preferences.rulerUnits,doc=null;
-var report={status:'failed',application:'Adobe Photoshop',version:app.version,exporterIdentity:'Photoshop native contentLayer creation v1',errors:[],shapeTests:[],emittedShapeFamilies:[],familyTests:[],executionLog:['photoshop-execution.log'],uiEvidence:[]};
+var report={status:'failed',application:'Adobe Photoshop',version:app.version,exporterIdentity:'Photoshop native contentLayer creation v2 / explicit shadow profiles',errors:[],shapeTests:[],emittedShapeFamilies:[],familyTests:[],executionLog:['photoshop-execution.log'],uiEvidence:[]};
 function color(v){var q=new ActionDescriptor();q.putDouble(c('Rd  '),v[0]);q.putDouble(c('Grn '),v[1]);q.putDouble(c('Bl  '),v[2]);return q;}
 function nativeShape(sp,name){
  var mk=new ActionDescriptor(),ref=new ActionReference();ref.putClass(s('contentLayer'));mk.putReference(c('null'),ref);var use=new ActionDescriptor(),fill=new ActionDescriptor();fill.putObject(c('Clr '),c('RGBC'),color(sp.fill));use.putObject(c('Type'),s('solidColorLayer'),fill);
@@ -19,8 +19,9 @@ function nativeShape(sp,name){
  r.putUnitDouble(s('topLeft'),c('#Pxl'),sp.radii[0]);r.putUnitDouble(s('topRight'),c('#Pxl'),sp.radii[1]);r.putUnitDouble(s('bottomRight'),c('#Pxl'),sp.radii[2]);r.putUnitDouble(s('bottomLeft'),c('#Pxl'),sp.radii[3]);use.putObject(c('Shp '),s('rectangle'),r);
  var st=new ActionDescriptor();st.putInteger(s('strokeStyleVersion'),2);st.putBoolean(s('strokeEnabled'),!!(sp.stroke&&sp.strokeWidth));st.putBoolean(s('fillEnabled'),sp.fill[3]>0);st.putUnitDouble(s('strokeStyleLineWidth'),c('#Pxl'),sp.strokeWidth||0);st.putUnitDouble(s('strokeStyleOpacity'),c('#Prc'),100);st.putEnumerated(s('strokeStyleLineAlignment'),s('strokeStyleLineAlignment'),s('strokeStyleAlignInside'));st.putEnumerated(s('strokeStyleLineCapType'),s('strokeStyleLineCapType'),s('strokeStyleButtCap'));st.putEnumerated(s('strokeStyleLineJoinType'),s('strokeStyleLineJoinType'),s('strokeStyleMiterJoin'));st.putEnumerated(s('strokeStyleBlendMode'),c('BlnM'),c('Nrml'));var sc=new ActionDescriptor();sc.putObject(c('Clr '),c('RGBC'),color(sp.stroke||sp.fill));st.putObject(s('strokeStyleContent'),s('solidColorLayer'),sc);use.putObject(s('strokeStyle'),s('strokeStyle'),st);
  mk.putObject(c('Usng'),s('contentLayer'),use);executeAction(c('Mk  '),mk,DialogModes.NO);var layer=doc.activeLayer;layer.name=name;layer.opacity=100*sp.opacity*(sp.fill[3]>0?sp.fill[3]:(sp.stroke?sp.stroke[3]:1));
- if(sp.shadow&&sp.shadow!='none'){
-  var set=new ActionDescriptor(),ar=new ActionReference();ar.putProperty(c('Prpr'),c('Lefx'));ar.putEnumerated(c('Lyr '),c('Ordn'),c('Trgt'));set.putReference(c('null'),ar);var fx=new ActionDescriptor();fx.putUnitDouble(c('Scl '),c('#Prc'),100);var sh=new ActionDescriptor();sh.putBoolean(c('enab'),true);sh.putBoolean(s('present'),true);sh.putBoolean(s('showInDialog'),true);sh.putEnumerated(c('Md  '),c('BlnM'),c('Nrml'));sh.putObject(c('Clr '),c('RGBC'),color([21,57,90]));sh.putUnitDouble(c('Opct'),c('#Prc'),4);sh.putBoolean(c('uglg'),false);sh.putUnitDouble(c('lagl'),c('#Ang'),90);sh.putUnitDouble(c('Dstn'),c('#Pxl'),2);sh.putUnitDouble(c('Ckmt'),c('#Pxl'),0);sh.putUnitDouble(c('blur'),c('#Pxl'),8);fx.putObject(c('DrSh'),c('DrSh'),sh);set.putObject(c('T   '),c('Lefx'),fx);executeAction(c('setd'),set,DialogModes.NO);
+ if(sp.shadowEffect){
+  var shadow=sp.shadowEffect;
+  var set=new ActionDescriptor(),ar=new ActionReference();ar.putProperty(c('Prpr'),c('Lefx'));ar.putEnumerated(c('Lyr '),c('Ordn'),c('Trgt'));set.putReference(c('null'),ar);var fx=new ActionDescriptor();fx.putUnitDouble(c('Scl '),c('#Prc'),100);var sh=new ActionDescriptor();sh.putBoolean(c('enab'),true);sh.putBoolean(s('present'),true);sh.putBoolean(s('showInDialog'),true);sh.putEnumerated(c('Md  '),c('BlnM'),c('Nrml'));sh.putObject(c('Clr '),c('RGBC'),color(shadow.color));sh.putUnitDouble(c('Opct'),c('#Prc'),100*shadow.color[3]);sh.putBoolean(c('uglg'),false);sh.putUnitDouble(c('lagl'),c('#Ang'),shadow.angle);sh.putUnitDouble(c('Dstn'),c('#Pxl'),shadow.distance);sh.putUnitDouble(c('Ckmt'),c('#Pxl'),0);sh.putUnitDouble(c('blur'),c('#Pxl'),shadow.blur);fx.putObject(c('DrSh'),c('DrSh'),sh);set.putObject(c('T   '),c('Lefx'),fx);executeAction(c('setd'),set,DialogModes.NO);
  }
  return layer;
 }
@@ -48,6 +49,22 @@ function propertyTest(l,sp){
 }
 try{
  app.displayDialogs=DialogModes.NO;app.preferences.rulerUnits=Units.PIXELS;log('Start native rebuild Photoshop '+app.version);
+
+ var data=JSON.parse(read(new File(root+'/photoshop-rebuild-data.json')));
+ var fixtureSpecs=[],seenEffects={};
+ for(var fi=0;fi<data.items.length;fi++)for(var fj=0;fj<data.items[fi].specs.length;fj++){
+  var fs=data.items[fi].specs[fj];
+  if(fs.shadowEffect||fs.purpose){var fk=fs.shadowEffect?JSON.stringify(fs.shadowEffect):fs.purpose;if(!seenEffects[fk]){seenEffects[fk]=true;fixtureSpecs.push(fs);}}
+ }
+ report.shadowFixtureTests=[];
+ for(var fi=0;fi<fixtureSpecs.length;fi++){
+  doc=app.documents.add(360,240,72,'Shadow Compatibility Fixture',NewDocumentMode.RGB,DocumentFill.TRANSPARENT);
+  var fs=fixtureSpecs[fi],sp={bounds:[50,50,220,120],radii:fs.radii,fill:fs.fill,stroke:fs.stroke,strokeWidth:fs.strokeWidth,opacity:fs.opacity,shadow:fs.shadow,shadowEffect:fs.shadowEffect};
+  var fl=nativeShape(sp,'Shadow fixture');moveTest(fl);propertyTest(fl,sp);
+  var fo=new PhotoshopSaveOptions();fo.layers=true;var fp=new File(root+'/shadow-fixture-'+fi+'.psd');doc.saveAs(fp,fo,true,Extension.LOWERCASE);doc.close(SaveOptions.DONOTSAVECHANGES);doc=app.open(fp);moveTest(doc.layers[0]);propertyTest(doc.layers[0],sp);
+  var pn=new PNGSaveOptions();doc.saveAs(new File(root+'/shadow-fixture-'+fi+'.png'),pn,true,Extension.LOWERCASE);doc.close(SaveOptions.DONOTSAVECHANGES);
+  report.shadowFixtureTests.push({profile:fs.shadowEffect||fs.purpose,moveScaleRotateUndo:true,saveReopenMoveUndo:true});log('Shadow fixture passed '+fi);
+ }
  // Establish the native route on a disposable fixture before touching the production staging document.
  doc=app.documents.add(240,180,72,'Native Shape Compatibility Fixture',NewDocumentMode.RGB,DocumentFill.TRANSPARENT);var fixture= nativeShape({bounds:[20,20,160,100],radii:[0,12,24,36],fill:[20,80,170,1],stroke:[180,30,40,1],strokeWidth:2,opacity:1,shadow:'none'},'Independent corner fixture');moveTest(fixture);propertyTest(fixture,{radii:[0,12,24,36]});var fopt=new PhotoshopSaveOptions();fopt.layers=true;doc.saveAs(new File(root+'/native-fixture.psd'),fopt,true,Extension.LOWERCASE);doc.close(SaveOptions.DONOTSAVECHANGES);doc=app.open(new File(root+'/native-fixture.psd'));moveTest(doc.layers[0]);doc.close(SaveOptions.DONOTSAVECHANGES);log('Native fixture move/scale/rotate/save/reopen passed');
  var data=JSON.parse(read(new File(root+'/photoshop-rebuild-data.json')));doc=app.open(new File(__STAGING_JSON__));report.openWithoutRepair=true;must(doc.width.as('px')===data.width && doc.height.as('px')===data.height,'Wrong width');
@@ -57,7 +74,7 @@ try{
   var item=data.items[i],key=item.marker.split(' ')[0],old=originals[key];must(old,'Missing staging layer '+key);
   if(!groups[item.moduleId]){groups[item.moduleId]=doc.layerSets.add();groups[item.moduleId].name=item.module;}
   var g=groups[item.moduleId];doc.activeLayer=old;
-  if(item.specs.length){for(var j=0;j<item.specs.length;j++){var nl=nativeShape(item.specs[j],item.name);nl.move(g,ElementPlacement.INSIDE);shapes.push(nl);specs.push(item.specs[j]);}old.remove();}
+  if(item.specs.length){for(var j=0;j<item.specs.length;j++){var nl=nativeShape(item.specs[j],item.name+(item.specs[j].purpose?' / '+item.specs[j].purpose:''));nl.move(g,ElementPlacement.INSIDE);shapes.push(nl);specs.push(item.specs[j]);}old.remove();}
   else {old.name=item.name;old.move(g,ElementPlacement.INSIDE);}
  }
  for(var i=0;i<shapes.length;i++){

@@ -27,6 +27,14 @@ def validate(job_dir,psd_path):
    require(abs(l.stroke.line_width-sp['strokeWidth'])<.05,'Stroke width differs')
    sc=l.stroke.content[b'Clr '];require(max(abs(sc[k].value-v) for k,v in zip([b'Rd  ',b'Grn ',b'Bl  '],sp['stroke'][:3]))<.05,'Stroke color differs')
   alpha=sp['fill'][3] if sp['fill'][3]>0 else (sp['stroke'] or [0,0,0,1])[3];require(abs(l.opacity-255*sp['opacity']*alpha)<=1.1,'Native shape opacity differs')
+  effect=sp.get('shadowEffect')
+  if effect:
+   shadows=[e for e in l.effects if type(e).__name__=='DropShadow' and e.enabled]
+   require(len(shadows)==1,'Expected one editable native drop shadow: '+l.name)
+   e=shadows[0]
+   require(abs(e.opacity-100*effect['color'][3])<=.51,'Native shadow opacity differs beyond Photoshop integer rounding')
+   require(max(abs(getattr(e,k)-effect[v]) for k,v in [('distance','distance'),('angle','angle'),('size','blur'),('choke','spread')])<.05,'Native shadow geometry differs')
+   require(max(abs(e.color[k].value-v) for k,v in zip([b'Rd  ',b'Grn ',b'Bl  '],effect['color'][:3]))<.05,'Native shadow color differs')
   require(all(t.get(k) is True for k in ['moveCommitted','positionVerified','undoVerified','reopenedMoveCommitted','reopenedUndoVerified']),'Real Photoshop edit test incomplete')
  expected=[a['text'] for a in manifest['atoms'] if a['kind']=='text'];actual=[l.text.rstrip('\r\x00') for l in layers if l.kind=='type'];require(expected==actual,'Native text content/order differs')
  require(all(l.is_group() for l in doc),'Ungrouped root layers')
@@ -34,7 +42,11 @@ def validate(job_dir,psd_path):
  for item in data['items']:
   if item['moduleId'] not in keys:keys.add(item['moduleId']);expected_groups.append(item['module'])
  require([l.name for l in doc]==expected_groups,'Module group names/order differ')
- result={'nativeShapeLayers':len(shapes),'expectedShapeLayers':len(specs),'nativeTextLayers':len(actual),'moduleGroups':expected_groups,'canvas':list(doc.size),'finalPsdSha256':hashlib.sha256(file.read_bytes()).hexdigest(),'structuralValidation':'passed','photoshopEditTest':'pending-visual-and-ui-validation'}
+ effect_specs=[sp for sp in specs if sp.get('shadowEffect') or sp.get('purpose') in ('外描边','内描边')]
+ if effect_specs:
+  fixture_tests=raw.get('shadowFixtureTests',[])
+  require(fixture_tests and all(t.get('moveScaleRotateUndo') and t.get('saveReopenMoveUndo') for t in fixture_tests),'Shadow fixture editing evidence missing')
+ result={'nativeShapeLayers':len(shapes),'expectedShapeLayers':len(specs),'nativeTextLayers':len(actual),'moduleGroups':expected_groups,'nativeShadowEffects':sum(bool(sp.get('shadowEffect')) for sp in specs),'nativeOutsetShapes':sum(sp.get('purpose')=='外描边' for sp in specs),'nativeInsetShapes':sum(sp.get('purpose')=='内描边' for sp in specs),'canvas':list(doc.size),'finalPsdSha256':hashlib.sha256(file.read_bytes()).hexdigest(),'structuralValidation':'passed','photoshopEditTest':'pending-visual-and-ui-validation'}
  (root/'native_structure_validation.json').write_text(json.dumps(result,ensure_ascii=False,indent=2),encoding='utf8')
  return result,raw
 

@@ -1,0 +1,85 @@
+{
+  "application": "Adobe Photoshop",
+  "version": "27.10.0",
+  "date": "2026-10-19",
+  "qualification": "Observed scripted editing and independent UI/visual checks on this run; each new output still requires its own gate.",
+  "finalExampleSha256": "0c9da786193e158de6ec869554e2b4cf70b39f5de0d36c50379f32e727571d74",
+  "shapeTests": 61,
+  "shadowFixtureTests": [
+    {
+      "profile": "外描边",
+      "moveScaleRotateUndo": true,
+      "saveReopenMoveUndo": true
+    },
+    {
+      "profile": {
+        "kind": "drop-shadow",
+        "color": [
+          21,
+          57,
+          85,
+          0.047
+        ],
+        "distance": 6,
+        "angle": 90,
+        "blur": 28,
+        "spread": 0
+      },
+      "moveScaleRotateUndo": true,
+      "saveReopenMoveUndo": true
+    },
+    {
+      "profile": {
+        "kind": "drop-shadow",
+        "color": [
+          21,
+          57,
+          90,
+          0.04
+        ],
+        "distance": 2,
+        "angle": 90,
+        "blur": 8,
+        "spread": 0
+      },
+      "moveScaleRotateUndo": true,
+      "saveReopenMoveUndo": true
+    }
+  ],
+  "fixtureSha256": {
+    "shadow-fixture-0.psd": "68ff2c1fba1beeb08bccc879c680467b92b8af8bb5c2f6b6f8535147d973caab",
+    "shadow-fixture-1.psd": "23f728b54662693369a778cd903e3434e49bf1226ebfcfb33de890549812ea7c",
+    "shadow-fixture-2.psd": "9f0968a354775a4833e1d8271deea5a666c4416fdc1f51813d85e97de09036cd"
+  },
+  "observedProperties": {
+    "fill": true,
+    "stroke": true,
+    "independentCorners": [
+      0,
+      12,
+      24,
+      36
+    ]
+  },
+  "regressionTests": {
+    "run": 40,
+    "passed": 36,
+    "skipped": 4,
+    "skipReason": "Legacy external reference-job tests require a separately supplied historical job; actual current-page native validation passed."
+  },
+  "additionalValidation": [
+    {
+      "date": "2026-10-19",
+      "application": "Adobe Photoshop",
+      "version": "27.10.0",
+      "scope": "Zero-offset, zero-blur, positive-spread trailing inset converted to a native inside-stroke shape; six final PSDs also passed exact-file shape gates and native type edit/undo plus 2x size/undo.",
+      "fixture": {
+        "profile": "内描边",
+        "moveScaleRotateUndo": true,
+        "saveReopenMoveUndo": true,
+        "sha256": "11787c36f77f640ce4a295038e39acf30a0ce100ac6da575d39f9629d00b4b87"
+      },
+      "qualification": "Validated for the stated hard-inset geometry. Offset, blurred, multiple, prefix-form, or otherwise different inset shadows remain unsupported and require a new fixture."
+    }
+  ]
+}

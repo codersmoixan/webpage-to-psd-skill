@@ -77,11 +77,33 @@ def rounded_mask(size, rect, radius, scale):
     draw = ImageDraw.Draw(mask)
     x, y, w, h = rect
     values = radius.split()
-    if '/' in radius or (len(values) > 1 and len(set(values)) != 1):
-        raise UnsupportedImagePaint(f'Unsupported asymmetric border radius: {radius}')
-    r = length(values[0] if values else '0px', min(w, h) / scale) * scale
-    bounds = (round(x), round(y), round(x + w) - 1, round(y + h) - 1)
-    draw.rounded_rectangle(bounds, radius=min(r, w / 2, h / 2), fill=255)
+    if '/' in radius:
+        raise UnsupportedImagePaint(f'Unsupported elliptical border radius: {radius}')
+    if not values: values = ['0px']
+    if len(values) == 1: values *= 4
+    elif len(values) == 2: values *= 2
+    elif len(values) == 3: values.append(values[1])
+    if len(values) != 4:
+        raise UnsupportedImagePaint(f'Unsupported border radius: {radius}')
+    radii = [length(v, min(w,h) / scale) * scale for v in values]
+    factor = min([1] + [limit / total for limit,total in [(w,radii[0]+radii[1]),(w,radii[3]+radii[2]),(h,radii[0]+radii[3]),(h,radii[1]+radii[2])] if total > 0])
+    radii = [r*factor for r in radii]
+    bounds = (round(x), round(y), round(x+w)-1, round(y+h)-1)
+    draw.rectangle(bounds, fill=255)
+    for index,r in enumerate(radii):
+        if r <= 0: continue
+        diameter = max(1,round(2*r))
+        circle = Image.new('L',(diameter,diameter))
+        ImageDraw.Draw(circle).ellipse((0,0,diameter-1,diameter-1),fill=255)
+        half = max(1,round(r))
+        right = index in (1,2)
+        bottom = index in (2,3)
+        left = diameter-half if right else 0
+        top = diameter-half if bottom else 0
+        corner = circle.crop((left,top,left+half,top+half))
+        px = bounds[2]-half+1 if right else bounds[0]
+        py = bounds[3]-half+1 if bottom else bounds[1]
+        mask.paste(corner,(px,py))
     return mask
 
 

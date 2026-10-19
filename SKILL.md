@@ -42,6 +42,8 @@ Before implementing or using a native-shape exporter, read [references/photoshop
 
 For production shape exports, follow [references/native-photoshop-workflow.md](references/native-photoshop-workflow.md). Use `scripts/prepare_native_photoshop_job.py`, `assets/photoshop_native_rebuild.jsx.template`, and `scripts/validate_native_photoshop_output.py` instead of recreating a descriptor writer per page. The packaged `build_psd.py` output is internal paint staging until the native bridge and delivery gate pass; do not mistake it for a finished native-shape PSD. Helpers have a defined supported surface scope and must stop on unsupported paint.
 
+The native bridge supports separate editable zero-blur hard outer-shadow rectangles, zero-blur hard inset strokes, and two explicit soft-shadow profiles, with job-derived Photoshop fixture tests. Read the supported profiles and opacity-rounding limits in the native workflow reference before extending shadows; unknown effects must still fail. Original-file image rendering supports independent nonelliptical corner radii.
+
 ## Native editable color shapes
 
 - Convert every axis-aligned solid-color rectangular surface into a native Photoshop vector shape layer when its geometry can be represented faithfully. This includes page and section backgrounds, cards, buttons, inputs, badges, dividers, solid borders, and solid-color `::before` or `::after` surfaces. The layer must be recognized by Photoshop as a Shape layer with editable Fill, Stroke, path bounds, and corner controls; a pixel layer, raster mask, smart object, or a layer merely named “shape” does not satisfy this requirement.
@@ -70,6 +72,8 @@ For production shape exports, follow [references/native-photoshop-workflow.md](r
 7. The builder saves to a sibling temporary PSD, reopens it and validates canvas, PPI, native text content and bounds before replacing the final path. Reopen and independently composite the final PSD, comparing it to both the generated preview and browser reference. Never replace this check with a crop of the generated preview. A separate cache-based layer check can supplement it but must identify its method honestly.
 8. Run the actual Photoshop edit smoke tests and the mandatory `check_photoshop_edit_gate.py` delivery gate on the exact final PSD. Failed or missing tests block completion; a successful psd-tools reopen is insufficient.
 9. Read `visual_qa/summary.json`, then visually inspect `visual_qa/overview.png` and the selected native-pixel crops. The builder generates these automatically using [scripts/generate_visual_qa.py](scripts/generate_visual_qa.py). Fix missing assets, stacking order, clipping, opacity, viewport drift or blurry text before delivery.
+
+For multiple pages, read [references/batch-and-delivery.md](references/batch-and-delivery.md). Its manifest-driven helpers generate Photoshop batch runners, exercise editable type, verify exact PSD/evidence hashes and package only declared artifacts without embedding project names or machine paths in the skill.
 
 ## Token-efficient inspection
 
