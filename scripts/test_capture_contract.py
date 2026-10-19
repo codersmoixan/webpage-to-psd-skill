@@ -45,12 +45,12 @@ class CaptureContractIntegrationTests(unittest.TestCase):
             prepare(root, scale, auto_scale=not strict)
         return json.loads((root/'web_layers.json').read_text())
 
-    def test_omitted_width_uses_2560_at_one_x(self):
-        root = self.make_job(2560, 'default-2560')
+    def test_omitted_width_uses_1920_at_one_x(self):
+        root = self.make_job(1920, 'default-1920')
         manifest = self.prepare_quietly(root)
         dimensions = json.loads((root/'capture_dimensions.json').read_text())
-        self.assertEqual((manifest['width'], manifest['renderScale']), (2560, 1))
-        self.assertEqual(dimensions['finalPSDWidth'], 2560)
+        self.assertEqual((manifest['width'], manifest['renderScale']), (1920, 1))
+        self.assertEqual(dimensions['finalPSDWidth'], 1920)
 
     def test_explicit_width_uses_exact_value_at_default_scale(self):
         root = self.make_job(1440, 'explicit')
@@ -58,6 +58,16 @@ class CaptureContractIntegrationTests(unittest.TestCase):
         dimensions = json.loads((root/'capture_dimensions.json').read_text())
         self.assertEqual((manifest['width'], manifest['renderScale']), (1440, 1))
         self.assertEqual(dimensions['finalPSDWidth'], 1440)
+
+    def test_explicit_2560_width_still_overrides_new_default(self):
+        root = self.make_job(2560, 'explicit')
+        manifest = self.prepare_quietly(root)
+        self.assertEqual(manifest['width'], 2560)
+
+    def test_default_source_rejects_nondefault_width(self):
+        root = self.make_job(2560, 'default-1920')
+        with self.assertRaisesRegex(CaptureContractError, '1920-pixel viewport'):
+            self.prepare_quietly(root)
 
     def test_explicit_width_and_scale_are_both_preserved(self):
         root = self.make_job(1440, 'explicit', 2, 'explicit')

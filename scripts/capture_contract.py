@@ -43,13 +43,13 @@ def validate_capture_dimensions(root, before, after, screenshot_size,
     """Validate the pre-build contract and return a normalized dimensions record."""
     dimensions = load_capture_dimensions(root)
     width_source = dimensions.get('widthSource')
-    _require(width_source in ('explicit', 'default-2560'),
-             'widthSource must be "explicit" or "default-2560"')
+    _require(width_source in ('explicit', 'default-1920'),
+             'widthSource must be "explicit" or "default-1920"')
     requested_width = _positive_int(dimensions.get('requestedViewportWidth'),
                                     'requestedViewportWidth')
-    if width_source == 'default-2560':
-        _require(requested_width == 2560,
-                 'default-2560 capture must request a 2560-pixel viewport')
+    if width_source == 'default-1920':
+        _require(requested_width == 1920,
+                 'default-1920 capture must request a 1920-pixel viewport')
 
     scale_source = dimensions.get('scaleSource')
     _require(scale_source in ('explicit', 'default-1'),

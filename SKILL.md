@@ -9,7 +9,7 @@ Reconstruct the requested rendered page state as a PSD instead of placing one sc
 
 ## Required outcome
 
-- Match one clearly identified viewport and UI state. Treat 2560 CSS pixels only as the fallback viewport width when the request omits a width. Any positive user-requested viewport or canvas width overrides the fallback and must be used exactly; never force an explicit width back to 2560. Apply and verify the resolved width using [references/browser-capture.md](references/browser-capture.md). CSS viewport width, content width, output render scale and PSD PPI are separate settings; never infer one from another.
+- Match one clearly identified viewport and UI state. Treat 1920 CSS pixels only as the fallback viewport width when the request omits a width. Any positive user-requested viewport or canvas width overrides the fallback and must be used exactly; never force an explicit width back to 1920. Apply and verify the resolved width using [references/browser-capture.md](references/browser-capture.md). CSS viewport width, content width, output render scale and PSD PPI are separate settings; never infer one from another.
 - Write both horizontal and vertical PSD document resolution as 72 pixels per inch (PPI) by default. Default to 1 output pixel per captured CSS pixel (`--render-scale 1`); apply 2x, 3x or 4x only when the user requests enlargement. Preparation checks the standard PSD 30000-pixel edge limit before atlas rendering; never silently reduce an explicitly requested enlargement. Use `--strict-render-scale` for an explicitly requested scale; an explicit exact pixel size must not be silently reduced. Render text, SVGs and CSS surfaces directly at the chosen scale, never enlarge their 1x screenshots. Scale canvas, masks, coordinates and type sizes consistently.
 - Keep native type data and high-resolution type caches together. Preserve the intended font family, weight, tracking and antialiasing where supported, and disclose substitutions. Do not promise unlimited zoom clarity: cached text and raster images have finite resolution; native type can be rerendered by Photoshop when enlarged, subject to installed fonts.
 - Capture the full visible document at that viewport, including the footer. Wait until fonts and images finish loading.
@@ -23,11 +23,11 @@ Reconstruct the requested rendered page state as a PSD instead of placing one sc
 
 ## Width and scale resolution
 
-- Input with no width and no output scale: use a 2560 CSS-pixel viewport and 1x output.
+- Input with no width and no output scale: use a 1920 CSS-pixel viewport and 1x output.
 - Input with an explicit width but no output scale: use that viewport width and 1x output.
 - Input with both an explicit width and output scale: use both values. For example, a 1440-pixel viewport at 2x produces a 2880-pixel-wide PSD.
 
-These forms apply equally to URLs and local projects. Do not ask for a width merely because it was omitted; that is what the 2560-pixel fallback covers.
+These forms apply equally to URLs and local projects. Do not ask for a width merely because it was omitted; that is what the 1920-pixel fallback covers.
 
 ## Photoshop edit compatibility — mandatory delivery gate
 
@@ -62,7 +62,7 @@ For production shape exports, follow [references/native-photoshop-workflow.md](r
 ## Workflow
 
 1. Resolve the input. For a URL, use the provided page. For a local HTML/project directory or uploaded static-project archive, follow [references/local-static-project.md](references/local-static-project.md) to locate the entry and start a temporary loopback server. Read and follow the available Browser control skill, then open the online or reported local URL in the browser selected for that URL.
-2. Resolve the target width from an explicit request or the 2560-pixel default, apply and verify the CSS viewport width, then inspect the page and determine the requested/default state. Do not trigger hover states, tabs, carousels, or modals unless the user asked for them.
+2. Resolve the target width from an explicit request or the 1920-pixel default, apply and verify the CSS viewport width, then inspect the page and determine the requested/default state. Do not trigger hover states, tabs, carousels, or modals unless the user asked for them.
 3. Read [references/browser-capture.md](references/browser-capture.md) and collect the reference screenshot, both DOM/style captures, `capture_dimensions.json`, pseudo-element data, and original assets into a writable job directory. Preparation must stop if either DOM capture or the dimension contract is missing or inconsistent. Resolve the module map and human-readable group names from the same stable DOM capture.
 4. Use [scripts/capture_page.js](scripts/capture_page.js) as the page-evaluation source. Keep the viewport unchanged between extraction and the reference screenshot.
 5. Install missing Python dependencies only when needed. Prefer the bundled workspace Python; `Pillow`, `numpy`, and `psd-tools` are required.
@@ -81,7 +81,7 @@ For production shape exports, follow [references/native-photoshop-workflow.md](r
 
 ## Quality gates
 
-- Record the width source (`explicit` or `default-2560`), scale source (`explicit` or `default-1`), requested and measured CSS viewport width, content width, scrollbar width, screenshot dimensions, device pixel ratio and requested render scale in `capture_dimensions.json` using the schema in [references/browser-capture.md](references/browser-capture.md). `build_psd.py prepare` validates the record against both DOM captures and the saved screenshot, then adds the effective scale and final PSD dimensions. Only when both width and render scale are omitted must the final PSD be exactly 2560 pixels wide; otherwise validate against the explicit width multiplied by the resolved render scale.
+- Record the width source (`explicit` or `default-1920`), scale source (`explicit` or `default-1`), requested and measured CSS viewport width, content width, scrollbar width, screenshot dimensions, device pixel ratio and requested render scale in `capture_dimensions.json` using the schema in [references/browser-capture.md](references/browser-capture.md). `build_psd.py prepare` validates the record against both DOM captures and the saved screenshot, then adds the effective scale and final PSD dimensions. Only when both width and render scale are omitted must the final PSD be exactly 1920 pixels wide; otherwise validate against the explicit width multiplied by the resolved render scale.
 - The PSD canvas dimensions equal captured reference dimensions multiplied by the recorded render scale. Compare layout to the reference after downsampling the output, and verify sharpness separately at native output resolution.
 - Reopen the PSD and verify its horizontal and vertical resolution metadata are both 72 PPI. Changing PPI metadata alone does not add pixel detail or sharpen text caches.
 - Require atlas PNG dimensions to match the requested render scale before extracting layers. Keep these production checks as explicit exceptions rather than Python `assert` statements so `python -O` cannot disable them. Inspect small body text and CJK glyphs at 100% output pixels at the chosen render scale; save a local text-detail comparison against the enlarged old 1x cache when correcting blur. Do not count a low-resolution preview or text-content round trip as proof of sharpness. If Photoshop is available, verify type-layer editing and enlargement there; otherwise explicitly state that Photoshop text rerendering has not been tested.

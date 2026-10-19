@@ -16,9 +16,9 @@ Use this procedure after reading the installed Browser control skill.
 Before DOM extraction, resolve the capture width in this order:
 
 1. Use an explicit user-requested viewport or canvas width when present.
-2. Otherwise use a 2560 CSS-pixel viewport width.
+2. Otherwise use a 1920 CSS-pixel viewport width.
 
-The second rule is only a fallback. An explicit positive width always wins, for either a URL or a local project; do not replace, normalize or clamp it to 2560 merely because 2560 is the default. If width is omitted, use 2560 without asking the user to repeat the request.
+The second rule is only a fallback. An explicit positive width always wins, for either a URL or a local project; do not replace, normalize or clamp it to 1920 merely because 1920 is the default. If width is omitted, use 1920 without asking the user to repeat the request.
 
 Use the documented browser viewport capability to apply this width before any extraction. Height may retain the existing desktop viewport height unless a verified full-height capture is needed. After setting the viewport, read `window.innerWidth`, `window.innerHeight`, `document.documentElement.clientWidth`, `window.devicePixelRatio` and image/font readiness. Assert `innerWidth` equals the requested CSS viewport width; if the backend cannot honor it, resolve the limitation before capture. Do not change browser zoom as a substitute.
 
@@ -26,14 +26,14 @@ Before preparation, write `capture_dimensions.json` with these exact fields:
 
 ```json
 {
-  "widthSource": "default-2560",
-  "requestedViewportWidth": 2560,
-  "measuredInnerWidth": 2560,
+  "widthSource": "default-1920",
+  "requestedViewportWidth": 1920,
+  "measuredInnerWidth": 1920,
   "measuredInnerHeight": 1200,
-  "clientWidth": 2560,
+  "clientWidth": 1920,
   "scrollbarWidth": 0,
   "devicePixelRatio": 1,
-  "screenshotWidth": 2560,
+  "screenshotWidth": 1920,
   "screenshotHeight": 6816,
   "scaleSource": "default-1",
   "requestedRenderScale": 1
@@ -42,9 +42,9 @@ Before preparation, write `capture_dimensions.json` with these exact fields:
 
 Use `widthSource: "explicit"` for a user-specified width and `scaleSource: "explicit"` for a user-specified output scale. `requestedViewportWidth`, measured widths/heights and screenshot dimensions are positive integer CSS pixels; `scrollbarWidth` is a non-negative integer. Read screenshot dimensions from the saved image rather than assuming them. Preparation validates this record against `web_dom.json`, `web_dom_after.json`, `web_reference.png` and its CLI render scale, then adds `effectiveRenderScale`, `finalPSDWidth` and `finalPSDHeight`.
 
-A screenshot backend may omit scrollbar pixels: a 2560 viewport with a 15-pixel scrollbar can yield a 2545-pixel screenshot. This capture is rejected because the builder does not invent or stretch missing page pixels. Use a supported capture whose saved screenshot width exactly matches the resolved viewport width. Apply the same rule to any explicit viewport. Any change affecting layout requires fresh DOM extraction and a new reference screenshot.
+A screenshot backend may omit scrollbar pixels: a 1920 viewport with a 15-pixel scrollbar can yield a 1905-pixel screenshot. This capture is rejected because the builder does not invent or stretch missing page pixels. Use a supported capture whose saved screenshot width exactly matches the resolved viewport width. Apply the same rule to any explicit viewport. Any change affecting layout requires fresh DOM extraction and a new reference screenshot.
 
-Output scale and PPI remain independently configurable. A 2560-pixel capture at `--render-scale 1` stays 2560 pixels wide regardless of whether its metadata is 72 or 300 PPI; 4x rendering makes it 10240 pixels wide. Apply explicit user scale/PPI choices before preparation. Reset agent-applied viewport overrides after all capture and atlas work.
+Output scale and PPI remain independently configurable. A 1920-pixel capture at `--render-scale 1` stays 1920 pixels wide regardless of whether its metadata is 72 or 300 PPI; 4x rendering makes it 7680 pixels wide. Apply explicit user scale/PPI choices before preparation. Reset agent-applied viewport overrides after all capture and atlas work.
 
 ## Capture sequence
 
