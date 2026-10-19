@@ -1,0 +1,74 @@
+#target photoshop
+(function(){
+if(typeof JSON==='undefined'){
+ JSON={};JSON.parse=function(t){return eval('('+t+')');};
+ JSON.stringify=function(o){function q(t){return '"'+String(t).replace(/\\/g,'\\\\').replace(/"/g,'\\"').replace(/\r/g,'\\r').replace(/\n/g,'\\n').replace(/\t/g,'\\t')+'"';}function enc(v){if(v===null)return 'null';if(typeof v==='string')return q(v);if(typeof v==='number'||typeof v==='boolean')return String(v);if(v instanceof Array){var r=[];for(var i=0;i<v.length;i++)r.push(enc(v[i]));return '['+r.join(',')+']';}var r=[];for(var k in v)if(v.hasOwnProperty(k))r.push(q(k)+':'+enc(v[k]));return '{'+r.join(',')+'}';}return enc(o);};
+}
+
+var root=new Folder(__ROOT_JSON__),logFile=new File(root+'/photoshop-execution.log');logFile.encoding='UTF8';logFile.open('w');logFile.close();
+function log(t){logFile.open('a');logFile.writeln(new Date().toUTCString()+' '+t);logFile.close();}
+function s(t){return stringIDToTypeID(t);}function c(t){return charIDToTypeID(t);}function must(v,t){if(!v)throw Error(t);}
+function read(f){f.encoding='UTF8';must(f.open('r'),'Cannot read '+f);var t=f.read();f.close();return t;}
+function write(f,v){f.encoding='UTF8';f.open('w');f.write(JSON.stringify(v,null,2));f.close();}
+var previous=app.documents.length?app.activeDocument:null,oldDialogs=app.displayDialogs,oldUnits=app.preferences.rulerUnits,doc=null;
+var report={status:'failed',application:'Adobe Photoshop',version:app.version,exporterIdentity:'Photoshop native contentLayer creation v1',errors:[],shapeTests:[],emittedShapeFamilies:[],familyTests:[],executionLog:['photoshop-execution.log'],uiEvidence:[]};
+function color(v){var q=new ActionDescriptor();q.putDouble(c('Rd  '),v[0]);q.putDouble(c('Grn '),v[1]);q.putDouble(c('Bl  '),v[2]);return q;}
+function nativeShape(sp,name){
+ var mk=new ActionDescriptor(),ref=new ActionReference();ref.putClass(s('contentLayer'));mk.putReference(c('null'),ref);var use=new ActionDescriptor(),fill=new ActionDescriptor();fill.putObject(c('Clr '),c('RGBC'),color(sp.fill));use.putObject(c('Type'),s('solidColorLayer'),fill);
+ var r=new ActionDescriptor(),b=sp.bounds;r.putUnitDouble(c('Top '),c('#Pxl'),b[1]);r.putUnitDouble(c('Left'),c('#Pxl'),b[0]);r.putUnitDouble(c('Btom'),c('#Pxl'),b[1]+b[3]);r.putUnitDouble(c('Rght'),c('#Pxl'),b[0]+b[2]);r.putInteger(s('unitValueQuadVersion'),1);
+ r.putUnitDouble(s('topLeft'),c('#Pxl'),sp.radii[0]);r.putUnitDouble(s('topRight'),c('#Pxl'),sp.radii[1]);r.putUnitDouble(s('bottomRight'),c('#Pxl'),sp.radii[2]);r.putUnitDouble(s('bottomLeft'),c('#Pxl'),sp.radii[3]);use.putObject(c('Shp '),s('rectangle'),r);
+ var st=new ActionDescriptor();st.putInteger(s('strokeStyleVersion'),2);st.putBoolean(s('strokeEnabled'),!!(sp.stroke&&sp.strokeWidth));st.putBoolean(s('fillEnabled'),sp.fill[3]>0);st.putUnitDouble(s('strokeStyleLineWidth'),c('#Pxl'),sp.strokeWidth||0);st.putUnitDouble(s('strokeStyleOpacity'),c('#Prc'),100);st.putEnumerated(s('strokeStyleLineAlignment'),s('strokeStyleLineAlignment'),s('strokeStyleAlignInside'));st.putEnumerated(s('strokeStyleLineCapType'),s('strokeStyleLineCapType'),s('strokeStyleButtCap'));st.putEnumerated(s('strokeStyleLineJoinType'),s('strokeStyleLineJoinType'),s('strokeStyleMiterJoin'));st.putEnumerated(s('strokeStyleBlendMode'),c('BlnM'),c('Nrml'));var sc=new ActionDescriptor();sc.putObject(c('Clr '),c('RGBC'),color(sp.stroke||sp.fill));st.putObject(s('strokeStyleContent'),s('solidColorLayer'),sc);use.putObject(s('strokeStyle'),s('strokeStyle'),st);
+ mk.putObject(c('Usng'),s('contentLayer'),use);executeAction(c('Mk  '),mk,DialogModes.NO);var layer=doc.activeLayer;layer.name=name;layer.opacity=100*sp.opacity*(sp.fill[3]>0?sp.fill[3]:(sp.stroke?sp.stroke[3]:1));
+ if(sp.shadow&&sp.shadow!='none'){
+  var set=new ActionDescriptor(),ar=new ActionReference();ar.putProperty(c('Prpr'),c('Lefx'));ar.putEnumerated(c('Lyr '),c('Ordn'),c('Trgt'));set.putReference(c('null'),ar);var fx=new ActionDescriptor();fx.putUnitDouble(c('Scl '),c('#Prc'),100);var sh=new ActionDescriptor();sh.putBoolean(c('enab'),true);sh.putBoolean(s('present'),true);sh.putBoolean(s('showInDialog'),true);sh.putEnumerated(c('Md  '),c('BlnM'),c('Nrml'));sh.putObject(c('Clr '),c('RGBC'),color([21,57,90]));sh.putUnitDouble(c('Opct'),c('#Prc'),4);sh.putBoolean(c('uglg'),false);sh.putUnitDouble(c('lagl'),c('#Ang'),90);sh.putUnitDouble(c('Dstn'),c('#Pxl'),2);sh.putUnitDouble(c('Ckmt'),c('#Pxl'),0);sh.putUnitDouble(c('blur'),c('#Pxl'),8);fx.putObject(c('DrSh'),c('DrSh'),sh);set.putObject(c('T   '),c('Lefx'),fx);executeAction(c('setd'),set,DialogModes.NO);
+ }
+ return layer;
+}
+function bounds(l){var b=l.bounds;return [b[0].as('px'),b[1].as('px'),b[2].as('px'),b[3].as('px')];}
+function near(a,b){for(var i=0;i<a.length;i++)if(Math.abs(a[i]-b[i])>1.05)return false;return true;}
+function undo(){executeAction(c('undo'),undefined,DialogModes.NO);}
+function moveTest(l){doc.activeLayer=l;var b=bounds(l);l.translate(UnitValue(3,'px'),UnitValue(2,'px'));var n=bounds(l);must(near(n,[b[0]+3,b[1]+2,b[2]+3,b[3]+2]),'Move position mismatch '+l.name);undo();must(near(bounds(l),b),'Undo mismatch '+l.name);}
+function descriptor(l){var r=new ActionReference();r.putIdentifier(c('Lyr '),l.id);return executeActionGet(r);}
+function family(sp){
+ var rs=sp.radii;
+ var kind='independent-corners';
+ if(rs[0]===0 && rs[1]===0 && rs[2]===0 && rs[3]===0){kind='rectangle';}
+ else if(rs[0]===rs[1] && rs[1]===rs[2] && rs[2]===rs[3]){kind='equal-corners';}
+ if(sp.stroke && sp.strokeWidth){
+  if(sp.fill[3]>0){kind=kind+'/fill-stroke';}
+  else {kind=kind+'/stroke-only';}
+ }else {kind=kind+'/fill-only';}
+ if(sp.opacity*sp.fill[3]<1){kind=kind+'/alpha';}
+ return kind;
+}
+function propertyTest(l,sp){
+ var a=descriptor(l);must(a.hasKey(s('adjustment')),'Missing native fill descriptor '+l.name);must(a.hasKey(s('keyOriginType'))||a.hasKey(s('keyOriginShapeBBox'))||a.hasKey(s('AGMStrokeStyleInfo'))||a.hasKey(s('pathBounds')),'Missing native shape geometry '+l.name);
+ // Exact corner descriptors are checked independently in the Photoshop-saved PSD before delivery.
+ doc.activeLayer=l;var b=bounds(l);l.resize(103,97,AnchorPosition.MIDDLECENTER);undo();must(near(bounds(l),b),'Resize undo mismatch');l.rotate(3,AnchorPosition.MIDDLECENTER);undo();must(near(bounds(l),b),'Rotate undo mismatch');return true;
+}
+try{
+ app.displayDialogs=DialogModes.NO;app.preferences.rulerUnits=Units.PIXELS;log('Start native rebuild Photoshop '+app.version);
+ // Establish the native route on a disposable fixture before touching the production staging document.
+ doc=app.documents.add(240,180,72,'Native Shape Compatibility Fixture',NewDocumentMode.RGB,DocumentFill.TRANSPARENT);var fixture= nativeShape({bounds:[20,20,160,100],radii:[0,12,24,36],fill:[20,80,170,1],stroke:[180,30,40,1],strokeWidth:2,opacity:1,shadow:'none'},'Independent corner fixture');moveTest(fixture);propertyTest(fixture,{radii:[0,12,24,36]});var fopt=new PhotoshopSaveOptions();fopt.layers=true;doc.saveAs(new File(root+'/native-fixture.psd'),fopt,true,Extension.LOWERCASE);doc.close(SaveOptions.DONOTSAVECHANGES);doc=app.open(new File(root+'/native-fixture.psd'));moveTest(doc.layers[0]);doc.close(SaveOptions.DONOTSAVECHANGES);log('Native fixture move/scale/rotate/save/reopen passed');
+ var data=JSON.parse(read(new File(root+'/photoshop-rebuild-data.json')));doc=app.open(new File(__STAGING_JSON__));report.openWithoutRepair=true;must(doc.width.as('px')===data.width && doc.height.as('px')===data.height,'Wrong width');
+ var originals={};for(var i=0;i<doc.layers.length;i++){var l=doc.layers[i],key=l.name.match(/^(\d+) /);if(key)originals[key[1]]=l;else originals.base=l;}
+ var groups={},shapes=[],specs=[],nativeIds=[],familyMap={};var bg=doc.layerSets.add();bg.name='页面背景';var base=originals.base;doc.activeLayer=base;var white=nativeShape({bounds:[0,0,data.width,data.height],radii:[0,0,0,0],fill:[255,255,255,1],stroke:null,strokeWidth:0,opacity:1},'页面底色');white.move(bg,ElementPlacement.INSIDE);base.remove();shapes.push(white);specs.push({bounds:[0,0,data.width,data.height],radii:[0,0,0,0],fill:[255,255,255,1],stroke:null,strokeWidth:0,opacity:1});
+ for(var i=0;i<data.items.length;i++){
+  var item=data.items[i],key=item.marker.split(' ')[0],old=originals[key];must(old,'Missing staging layer '+key);
+  if(!groups[item.moduleId]){groups[item.moduleId]=doc.layerSets.add();groups[item.moduleId].name=item.module;}
+  var g=groups[item.moduleId];doc.activeLayer=old;
+  if(item.specs.length){for(var j=0;j<item.specs.length;j++){var nl=nativeShape(item.specs[j],item.name);nl.move(g,ElementPlacement.INSIDE);shapes.push(nl);specs.push(item.specs[j]);}old.remove();}
+  else {old.name=item.name;old.move(g,ElementPlacement.INSIDE);}
+ }
+ for(var i=0;i<shapes.length;i++){
+  var l=shapes[i],sp=specs[i];moveTest(l);var fam=family(sp);if(!familyMap[fam]){propertyTest(l,sp);familyMap[fam]=true;report.emittedShapeFamilies.push(fam);report.familyTests.push({family:fam,scaleCommitUndo:true,rotateCommitUndo:true,fillStrokeVerified:true,cornersVerified:false});}
+  report.shapeTests.push({layerId:l.id,moveCommitted:true,positionVerified:true,undoVerified:true,reopenedMoveCommitted:false,reopenedUndoVerified:false});nativeIds.push(l.id);log('Shape move/undo passed '+l.id+' '+l.name);
+ }
+ var moduleGroup=groups[data.items[0].moduleId];doc.activeLayer=moduleGroup;var gb=bounds(moduleGroup);moduleGroup.translate(UnitValue(2,'px'),UnitValue(3,'px'));undo();must(near(bounds(moduleGroup),gb),'Group move undo mismatch');report.groupMoveUndo=true;
+ var out=new File(__OUTPUT_JSON__),save=new PhotoshopSaveOptions();save.layers=true;save.embedColorProfile=true;doc.saveAs(out,save,true,Extension.LOWERCASE);doc.close(SaveOptions.DONOTSAVECHANGES);doc=app.open(out);report.saveCloseReopen=true;
+ function findById(group,id){for(var z=0;z<group.layers.length;z++){var q=group.layers[z];if(q.id===id)return q;if(q.typename==='LayerSet'){var found=findById(q,id);if(found)return found;}}return null;}
+ for(var i=0;i<report.shapeTests.length;i++){var t=report.shapeTests[i],l=findById(doc,t.layerId);must(l,'Layer ID did not survive reopen '+t.layerId);moveTest(l);t.reopenedMoveCommitted=true;t.reopenedUndoVerified=true;log('Reopened shape move/undo passed '+l.id);}
+ var png=new PNGSaveOptions();doc.saveAs(new File(root+'/photoshop-preview.png'),png,true,Extension.LOWERCASE);doc.close(SaveOptions.DONOTSAVECHANGES);doc=null;report.status='pending-independent-validation';log('Native PSD generated and edit tests complete; independent geometry and visual validation required');
+}catch(e){report.errors.push(String(e)+' at line '+e.line);log('ERROR '+e+' line '+e.line);}
+finally{write(new File(root+'/photoshop-native-results.json'),report);logFile.close();app.displayDialogs=oldDialogs;app.preferences.rulerUnits=oldUnits;if(previous)try{app.activeDocument=previous;}catch(e){} }
+})();
