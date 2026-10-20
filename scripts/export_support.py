@@ -76,10 +76,14 @@ def select_font(css, text, inventory=None):
             style = ' '.join(f['styles'] + [f['postscript']]).lower()
             return (('bold' in style) != bold) + (('italic' in style or 'oblique' in style) != italic)
         selected = min(matches, key=score)
+        selected_style = ' '.join(selected['styles'] + [selected['postscript']]).lower()
         return {'requested': requested, 'postscript': selected['postscript'], 'path': selected['path'],
-                'substituted': family not in requested, 'installed': True}
+                'substituted': family not in requested, 'installed': True,
+                'faceBold': bool(re.search(r'bold|black|semibold|demibold|heavy', selected_style)),
+                'faceItalic': bool(re.search(r'italic|oblique', selected_style))}
     return {'requested': requested, 'postscript': 'MicrosoftYaHei' if cjk else 'ArialMT',
-            'path': None, 'substituted': True, 'installed': False}
+            'path': None, 'substituted': True, 'installed': False,
+            'faceBold': False, 'faceItalic': False}
 
 
 def atomic_save(psd, output, validate):

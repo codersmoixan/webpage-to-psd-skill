@@ -34,10 +34,24 @@ class ExportSupportTests(unittest.TestCase):
                {'aliases':['Microsoft YaHei'],'postscript':'MicrosoftYaHei-Bold','styles':['Bold'],'path':'bold.ttf'}]
         result=select_font({'fontFamily':'"Missing", "Microsoft YaHei", Arial','fontWeight':'700'},'中文',fonts)
         self.assertEqual(result['postscript'],'MicrosoftYaHei-Bold')
+        self.assertTrue(result['faceBold'])
+        self.assertFalse(result['faceItalic'])
         self.assertFalse(result['substituted'])
         result=select_font({'fontFamily':'Missing'},'中文',fonts)
         self.assertTrue(result['substituted'])
         self.assertFalse(select_font({},'中文',[])['installed'])
+
+    def test_native_type_does_not_double_apply_bold_face(self):
+        from unittest.mock import patch
+        from psd_tools import PSDImage
+        from build_psd import native_text
+        template=next(t for t in PSDImage.open(Path(__file__).resolve().parents[1]/'assets/text-template.psd').descendants() if t.kind=='type')
+        atom={'id':1,'text':'后部载物空间','rect':{'x':1,'y':1},'css':{'fontFamily':'Microsoft YaHei','fontSize':'31px','fontWeight':'700','fontStyle':'normal','letterSpacing':'normal','color':'rgb(255, 255, 255)'}}
+        fonts=[{'aliases':['Microsoft YaHei'],'postscript':'MicrosoftYaHei-Bold','styles':['Bold'],'path':'bold.ttf'}]
+        with patch('build_psd.select_font', side_effect=lambda css,text: select_font(css,text,fonts)):
+            setting=native_text(template,atom)
+        style=setting.text_data[b'EngineData'].value['EngineDict']['StyleRun']['RunArray'][0]['StyleSheet']['StyleSheetData']
+        self.assertFalse(bool(style['FauxBold'].value))
 
     def test_atomic_save_preserves_previous_file_on_failure(self):
         class Document:

@@ -346,16 +346,18 @@ def native_text(template, atom, render_scale=1):
     rgb=values[:3];alpha=values[3] if len(values)>3 else 1
     ss['FontSize']=ed.Float(font_size * render_scale * 72 / DOCUMENT_PPI)
     ss['Font']=ed.Integer(0)
-    ss['FauxBold']=ed.Bool(int(atom['css']['fontWeight'])>=600)
-    ss['FauxItalic']=ed.Bool(atom['css']['fontStyle']=='italic')
+    font_info = select_font(atom['css'], text)
+    atom['fontSelection'] = font_info
+    # A real bold/italic face plus Photoshop faux styling changes glyph bounds
+    # on first edit, even when the imported raster cache initially looks right.
+    ss['FauxBold']=ed.Bool(int(atom['css']['fontWeight'])>=600 and not font_info['faceBold'])
+    ss['FauxItalic']=ed.Bool(atom['css']['fontStyle']=='italic' and not font_info['faceItalic'])
     ss['AutoLeading']=ed.Bool(True)
     ss['Tracking']=ed.Integer(round(px(atom['css']['letterSpacing'])/font_size*1000)) if atom['css']['letterSpacing']!='normal' else ed.Integer(0)
     ss['FillColor']['Values']=ed.List([ed.Float(alpha)]+[ed.Float(v/255) for v in rgb])
     ss['FillFirst']=ed.Bool(True)
     ss['BaselineDirection']=ed.Integer(0)
     cjk=any(ord(ch)>255 for ch in text)
-    font_info = select_font(atom['css'], text)
-    atom['fontSelection'] = font_info
     font_name = font_info['postscript']
     for key in ['ResourceDict','DocumentResources']:
         engine[key]['FontSet'][0]['Name']=ed.String(font_name)
